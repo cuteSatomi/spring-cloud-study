@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd" >
+<mapper namespace="com.zzx.springcloud.dao.PaymentDao">
+    <!--由于在application.yml配置文件中已经配置了别名，因此无需再写类的全路径
+    设置useGeneratedKeys参数值为true，在执行添加记录之后可以获取到数据库自动生成的主键ID，该参数只针对insert语句生效
+    keyProperty声明了该表的主键是id，可以将使用useGeneratedKeys获取到自动生成的主键ID赋值给Payment类中的id字段-->
+    <insert id="create" parameterType="Payment" useGeneratedKeys="true" keyProperty="id">
+        insert into payment(serial) values (#{serial})
+    </insert>
+
+    <resultMap id="BaseResultMap" type="com.zzx.springcloud.entities.Payment">
+        <id property="id" column="id" jdbcType="BIGINT"/>
+        <result property="serial" column="serial" jdbcType="VARCHAR"/>
+    </resultMap>
+    <select id="getPaymentById" parameterType="Long" resultMap="BaseResultMap">
+        select * from payment where id = #{id}
+    </select>
+</mapper>

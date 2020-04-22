@@ -1,4 +1,4 @@
-package com.zzx.springcloud.pojo;
+package com.zzx.springcloud.entities;
 
 import lombok.AllArgsConstructor;
 import lombok.Data;
