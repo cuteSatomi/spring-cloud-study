@@ -41,4 +41,9 @@ public class PaymentController {
             return new CommonResult(444, "(╥╯^╰╥) 没有ID为" + id + "的记录,serverPort:"+serverPort, null);
         }
     }
+
+    @GetMapping("/payment/lb")
+    public String getPaymentLB(){
+        return serverPort;
+    }
 }

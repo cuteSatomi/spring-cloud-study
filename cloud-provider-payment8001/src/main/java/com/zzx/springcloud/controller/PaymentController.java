@@ -8,6 +8,7 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.web.bind.annotation.*;
 
 import javax.annotation.Resource;
+import java.util.concurrent.TimeUnit;
 
 @RestController
 @Slf4j
@@ -36,9 +37,25 @@ public class PaymentController {
         log.info("╭(●｀∀´●)╯查询结果:" + payment);
 
         if (payment != null) {
-            return new CommonResult(200, "♪（＾∀＾●）查询成功,serverPort:"+serverPort, payment);
+            return new CommonResult(200, "♪（＾∀＾●）查询成功,serverPort:" + serverPort, payment);
         } else {
-            return new CommonResult(444, "(╥╯^╰╥) 没有ID为" + id + "的记录,serverPort:"+serverPort, null);
+            return new CommonResult(444, "(╥╯^╰╥) 没有ID为" + id + "的记录,serverPort:" + serverPort, null);
         }
+    }
+
+    @GetMapping("/payment/lb")
+    public String getPaymentLB() {
+        return serverPort;
+    }
+
+    @GetMapping("/payment/feign/timeout")
+    public String paymentFeignTimeout() {
+        try {
+            // 暂停3秒钟 模拟超时任务
+            TimeUnit.SECONDS.sleep(3);
+        } catch (InterruptedException e) {
+            e.printStackTrace();
+        }
+        return serverPort;
     }
 }
