@@ -1565,7 +1565,7 @@ public String getPaymentLB() {
             <artifactId>spring-boot-starter-test</artifactId>
             <scope>test</scope>
         </dependency>
-    </dependencies>
+</dependencies>
 ```
 
 #### 9.1.2.YML文件
@@ -1581,7 +1581,7 @@ eureka:
       defaultZone: http://eureka7001.com:7001/eureka/, http://eureka7002.com:7002/eureka/
 ```
 
-#### 9.1.3.主启动类
+#### 9.1.3.主启动类OrderFeignMain8888
 
 - com.zzx.springcloud.OrderFeignMain8888
 
@@ -1743,3 +1743,1356 @@ logging:
 3. 快速失败，快速恢复。
 4. 回退，尽可能优雅地降级。
 5. 启用近实时监控、警报和操作控制。
+
+
+
+**==重要概念==**
+
+- 服务降级
+
+  > 服务器忙请稍后再试，不让客户端等待并立刻返回一个友好提示
+
+  出现服务降级的原因：
+
+  - 程序运行异常
+  - 超时
+  - 服务熔断触发服务降级
+  - 线程池/信号量打满也会导致服务降级
+
+- 服务熔断
+
+  > 类比保险丝达到最大服务访问后，直接拒绝访问，拉闸限电
+
+  导致服务熔断的原因：
+
+  ​	服务的降级-->进而熔断-->恢复调用链路
+
+- 服务限流
+
+  > 秒杀高并发等操作，严禁一窝蜂过来拥挤。
+
+
+
+### 10.1.Hystrix支付微服务构建
+
+> 新建子模块cloud-provider-hystrix-payment8001
+
+#### 10.1.1.POM文件
+
+```xml
+<dependencies>
+        <!--hystrix-->
+        <dependency>
+            <groupId>org.springframework.cloud</groupId>
+            <artifactId>spring-cloud-starter-netflix-hystrix</artifactId>
+        </dependency>
+        <!--eureka client-->
+        <dependency>
+            <groupId>org.springframework.cloud</groupId>
+            <artifactId>spring-cloud-starter-netflix-eureka-client</artifactId>
+        </dependency>
+        <!--web-->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-web</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-actuator</artifactId>
+        </dependency>
+        <dependency><!-- 引入自己定义的api通用包，可以使用Payment支付Entity -->
+            <groupId>com.zzx.springcloud</groupId>
+            <artifactId>cloud-api-commons</artifactId>
+            <version>${project.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-devtools</artifactId>
+            <scope>runtime</scope>
+            <optional>true</optional>
+        </dependency>
+        <dependency>
+            <groupId>org.projectlombok</groupId>
+            <artifactId>lombok</artifactId>
+            <optional>true</optional>
+        </dependency>
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-test</artifactId>
+            <scope>test</scope>
+        </dependency>
+</dependencies>
+```
+
+#### 10.1.2.YML文件
+
+```yaml
+server:
+  port: 8001
+
+spring:
+  application:
+    name: cloud-provider-hystrix-payment
+
+eureka:
+  client:
+    register-with-eureka: true
+    fetch-registry: true
+    service-url:
+      #defaultZone: http://eureka7001.com:7001/eureka,http://eureka7002.com:7002/eureka
+      defaultZone: http://eureka7001.com:7001/eureka
+```
+
+#### 10.1.3.主启动类PaymentHystrixMain8001
+
+- com.zzx.springcloud.PaymentHystrixMain8001
+
+```java
+@SpringBootApplication
+@EnableEurekaClient
+public class PaymentHystrixMain8001 {
+    public static void main(String[] args) {
+        SpringApplication.run(PaymentHystrixMain8001.class, args);
+    }
+}
+```
+
+#### 10.1.4.Service层
+
+- com.zzx.springcloud.service.PaymentService
+
+```java
+@Service
+public class PaymentService {
+
+    public String paymentInfo_OK(Integer id) {
+        return "线程池:\t" + Thread.currentThread().getName() + "\tpaymentInfo_OK,id:\t" + id + "\t( ˘ ³˘)♥";
+    }
+
+    //演示超时导致服务降级
+    public String paymentInfo_TimeOut(Integer id) {
+        int sleepTime = 3;
+        try {
+            TimeUnit.SECONDS.sleep(sleepTime);
+        } catch (InterruptedException e) {
+            e.printStackTrace();
+        }
+        return "线程池:\t" + Thread.currentThread().getName() + "\tpaymentInfo_TimeOut,id:\t" + id + "\t (ಥ_ಥ) " + "耗时(秒):" + sleepTime;
+    }
+}
+```
+
+#### 10.1.5.Controller层
+
+- com.zzx.springcloud.controller.PaymentController
+
+```java
+@RestController
+@Slf4j
+public class PaymentController {
+
+    @Resource
+    private PaymentService paymentService;
+
+    @Value("${server.port}")
+    private String serverPort;
+
+    @GetMapping("/payment/hystrix/ok/{id}")
+    public String paymentInfo_OK(@PathVariable("id") Integer id) {
+        String result = paymentService.paymentInfo_OK(id);
+        log.info("=======result:"+result);
+        return result;
+    }
+
+    @GetMapping("/payment/hystrix/timeout/{id}")
+    public String paymentInfo_TimeOut(@PathVariable("id") Integer id) {
+        String result = paymentService.paymentInfo_TimeOut(id);
+        log.info("=======result:"+result);
+        return result;
+    }
+}
+```
+
+#### 10.1.6.访问测试
+
+- 访问http://localhost:8001/payment/hystrix/ok/514成功
+
+![image-20200424134608543](https://tva1.sinaimg.cn/large/007S8ZIlgy1ge4t3f8c34j30ru090gmu.jpg)
+
+- 访问http://localhost:8001/payment/hystrix/timeout/514成功
+
+![image-20200424134639848](https://tva1.sinaimg.cn/large/007S8ZIlgy1ge4t3x5jfej30ye06agn0.jpg)
+
+
+
+### 10.2.启动JMeter进行压力测试
+
+- 新建线程组
+
+![image-20200424142145615](https://tva1.sinaimg.cn/large/007S8ZIlgy1ge4u4fzeekj31dw0u07ak.jpg)
+
+- 新建HTTP请求
+
+![image-20200424142230926](https://tva1.sinaimg.cn/large/007S8ZIlgy1ge4u584d2gj31dw0u00zs.jpg)
+
+### 10.3.Hystrix订单微服务构建
+
+> 新建子模块cloud-consumer-feign-hystrix-order8888
+
+#### 10.3.1.POM文件
+
+```xml
+<dependencies>
+        <!--openfeign-->
+        <dependency>
+            <groupId>org.springframework.cloud</groupId>
+            <artifactId>spring-cloud-starter-openfeign</artifactId>
+        </dependency>
+        <!--hystrix-->
+        <dependency>
+            <groupId>org.springframework.cloud</groupId>
+            <artifactId>spring-cloud-starter-netflix-hystrix</artifactId>
+        </dependency>
+        <!--eureka client-->
+        <dependency>
+            <groupId>org.springframework.cloud</groupId>
+            <artifactId>spring-cloud-starter-netflix-eureka-client</artifactId>
+        </dependency>
+        <!-- 引入自己定义的api通用包，可以使用Payment支付Entity -->
+        <dependency>
+            <groupId>com.zzx.springcloud</groupId>
+            <artifactId>cloud-api-commons</artifactId>
+            <version>${project.version}</version>
+        </dependency>
+        <!--web-->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-web</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-actuator</artifactId>
+        </dependency>
+        <!--一般基础通用配置-->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-devtools</artifactId>
+            <scope>runtime</scope>
+            <optional>true</optional>
+        </dependency>
+        <dependency>
+            <groupId>org.projectlombok</groupId>
+            <artifactId>lombok</artifactId>
+            <optional>true</optional>
+        </dependency>
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-test</artifactId>
+            <scope>test</scope>
+        </dependency>
+</dependencies>
+```
+
+#### 10.3.2.YML文件
+
+```yaml
+server:
+  port: 8888
+
+eureka:
+  client:
+    register-with-eureka: false
+    service-url:
+      defaultZone: http://eureka7001.com:7001/eureka/
+```
+
+#### 10.3.3.主启动类OrderHystrixMain8888
+
+- com.zzx.springcloud.OrderHystrixMain8888
+
+```java
+@SpringBootApplication
+@EnableFeignClients
+public class OrderHystrixMain8888 {
+    public static void main(String[] args) {
+        SpringApplication.run(OrderHystrixMain8888.class, args);
+    }
+}
+```
+
+#### 10.3.4.Service层
+
+- com.zzx.springcloud.service.PaymentHystrixService
+
+```java
+@FeignClient(value = "CLOUD-PROVIDER-HYSTRIX-PAYMENT")
+public interface PaymentHystrixService {
+
+    @GetMapping("/payment/hystrix/ok/{id}")
+    public String paymentInfo_OK(@PathVariable("id") Integer id);
+
+    @GetMapping("/payment/hystrix/timeout/{id}")
+    public String paymentInfo_TimeOut(@PathVariable("id") Integer id);
+}
+```
+
+#### 10.3.5.Controller层
+
+- com.zzx.springcloud.controller.OrderHystrixController
+
+```java
+@RestController
+@Slf4j
+public class OrderHystrixController {
+
+    @Resource
+    private PaymentHystrixService paymentHystrixService;
+
+    @GetMapping("/consumer/payment/hystrix/ok/{id}")
+    public String paymentInfo_OK(@PathVariable("id") Integer id) {
+        return paymentHystrixService.paymentInfo_OK(id);
+    }
+
+    @GetMapping("/consumer/payment/hystrix/timeout/{id}")
+    public String paymentInfo_TimeOut(@PathVariable("id") Integer id) {
+        return paymentHystrixService.paymentInfo_TimeOut(id);
+    }
+}
+```
+
+#### 10.3.6.访问测试
+
+- 访问http://localhost:8888/consumer/payment/hystrix/ok/514成功
+
+![image-20200424145725887](https://tva1.sinaimg.cn/large/007S8ZIlgy1ge4v5jx5e8j30u2084myh.jpg)
+
+#### 10.3.7.暴露问题分析
+
+- 8001同一层次的其他接口服务被困死，因为tomcat线程池里的工作线程已经被挤占完毕
+- 8888(订单微服务)调用8001(支付微服务)，客户端访问响应缓慢，转圈圈
+
+
+
+==解决==
+
+- 对方服务(8001)超时了，调用者(8888)不能一直卡死等待，必须有服务降级
+- 对方服务(8001)down机了，调用者(8888)不能一直卡死等待，必须有服务降级
+- 对方服务(8001)OK，调用者(8888)自己出故障或有自我要求(自己的等待时间)
+
+
+
+### 10.4.服务降级
+
+#### 10.4.1.8001自身找问题
+
+- 修改com.zzx.springcloud.service.PaymentService
+
+```java
+@HystrixCommand(fallbackMethod = "paymentInfo_TimeOutHandler", commandProperties = {
+        //指定3秒钟以内访问到该接口是正常的，否则返回执行配置的fallbackMethod方法
+        @HystrixProperty(name = "execution.isolation.thread.timeoutInMilliseconds", value = "3000")
+})
+public String paymentInfo_TimeOut(Integer id) {
+    int sleepTime = 5;//此处从之前的3秒修改为了5秒
+    try {
+        TimeUnit.SECONDS.sleep(sleepTime);
+    } catch (InterruptedException e) {
+        e.printStackTrace();
+    }
+    return "线程池:\t" + Thread.currentThread().getName() + "\tpaymentInfo_TimeOut,id:\t" + id + "\t (ಥ_ಥ) " + "耗时(秒):" + sleepTime;
+}
+
+public String paymentInfo_TimeOutHandler(Integer id) {
+    return "线程池:\t" + Thread.currentThread().getName() + "\tpaymentInfo_TimeOutHandler,id:\t" + id + "\t ( ̤இॕ⌓இॕ ̤) ° ";
+}
+```
+
+- 在主启动类com.zzx.springcloud.PaymentHystrixMain8001上新增注解
+
+```java
+@EnableCircuitBreaker
+```
+
+- 重启8001微服务测试，访问http://localhost:8001/payment/hystrix/timeout/514，发现成功执行paymentInfo_TimeOutHandler方法
+
+![image-20200424152551144](https://tva1.sinaimg.cn/large/007S8ZIlgy1ge4vz4ofc5j30vs072jss.jpg)
+
+#### 10.4.2.修改8888
+
+- 在8888的YML配置文件中新增配置
+
+```yaml
+feign:
+  hystrix:
+    enabled: true
+```
+
+- 在8888的主启动类新增注解
+
+```java
+@EnableHystrix
+/*点开@EnableHystrix的源码
+@Target(ElementType.TYPE)
+@Retention(RetentionPolicy.RUNTIME)
+@Documented
+@Inherited
+@EnableCircuitBreaker 发现已经有这个注解了，因此只需要新增@EnableHystrix就足够了
+public @interface EnableHystrix {
+
+}
+*/
+```
+
+- Controller层的修改与8001的Service层基本相同
+
+```java
+@GetMapping("/consumer/payment/hystrix/timeout/{id}")
+@HystrixCommand(fallbackMethod = "paymentTimeOutFallbackMethod",commandProperties = {
+        @HystrixProperty(name="execution.isolation.thread.timeoutInMilliseconds",value="1500")
+})
+//@HystrixCommand
+public String paymentInfo_TimeOut(@PathVariable("id") Integer id) {
+    int age = 10/0;
+    String result = paymentHystrixService.paymentInfo_TimeOut(id);
+    return result;
+}
+public String paymentTimeOutFallbackMethod(@PathVariable("id") Integer id) {
+    return "我是消费者8888,对方支付系统繁忙请10秒钟后再试或者自己运行出错请检查自己,o(╥﹏╥)o";
+}
+```
+
+- 测试，访问http://localhost:8888/consumer/payment/hystrix/timeout/514
+
+![image-20200424160024360](https://tva1.sinaimg.cn/large/007S8ZIlgy1ge4wz2vy8mj311q06ejt1.jpg)
+
+
+
+#### 10.4.3.Hystrix全局服务降级
+
+- 在8888的controller层新增方法
+
+```java
+// 下面是全局fallback方法
+public String payment_Global_FallbackMethod() {
+    return "Global异常处理信息，请稍后再试，/(ㄒoㄒ)/~~";
+}
+```
+
+- 在controller类上新增注解
+
+```java
+//全局fallbacl方法注解
+@DefaultProperties(defaultFallback = "payment_Global_FallbackMethod")
+```
+
+- 修改8888的paymentInfo_TimeOut方法，防止fallback方法冲突，先注释掉具体的fallback方法，让他执行我们刚才配置的全局fallbak方法
+
+```java
+@GetMapping("/consumer/payment/hystrix/timeout/{id}")
+//@HystrixCommand(fallbackMethod = "paymentTimeOutFallbackMethod",commandProperties = {
+//      @HystrixProperty(name="execution.isolation.thread.timeoutInMilliseconds",value="1500")
+//})
+@HystrixCommand
+public String paymentInfo_TimeOut(@PathVariable("id") Integer id) {
+  int age = 10/0;
+  String result = paymentHystrixService.paymentInfo_TimeOut(id);
+  return result;
+}
+```
+
+- 测试，访问http://localhost:8888/consumer/payment/hystrix/timeout/514，执行的是payment_Global_FallbackMethod，说明配置成功
+
+![image-20200424160845720](https://tva1.sinaimg.cn/large/007S8ZIlgy1ge4x7rnba8j30um06o0ty.jpg)
+
+#### ==10.4.4.模拟宕机服务降级==
+
+- ##### 新增PaymentFallbackService类
+
+  com.zzx.springcloud.service.PaymentFallbackService
+
+```java
+@Component
+public class PaymentFallbackService implements PaymentHystrixService {
+    @Override
+    public String paymentInfo_OK(Integer id) {
+        return "PaymentFallbackService fall back (ಗдಗ。)°";
+    }
+
+    @Override
+    public String paymentInfo_TimeOut(Integer id) {
+        return "PaymentFallbackService fall back (ಗдಗ。)°";
+    }
+}
+```
+
+- ##### 在PaymentHystrixService中新增注解属性
+
+```java
+//在@FeignClient中新增fallback属性
+@FeignClient(value = "CLOUD-PROVIDER-HYSTRIX-PAYMENT",fallback = PaymentFallbackService.class)
+public interface PaymentHystrixService {
+
+    @GetMapping("/payment/hystrix/ok/{id}")
+    public String paymentInfo_OK(@PathVariable("id") Integer id);
+
+    @GetMapping("/payment/hystrix/timeout/{id}")
+    public String paymentInfo_TimeOut(@PathVariable("id") Integer id);
+}
+```
+
+- ##### 访问测试
+
+- 访问http://localhost:8888/consumer/payment/hystrix/ok/514成功
+
+![image-20200424162636677](https://tva1.sinaimg.cn/large/007S8ZIlgy1ge4xqcqwv1j30w606awfs.jpg)
+
+- 关闭8001微服务模拟服务器宕机
+
+- 再次访问http://localhost:8888/consumer/payment/hystrix/ok/514，成功执行PaymentFallbackService中定义的fallback方法
+
+![image-20200424162741742](https://tva1.sinaimg.cn/large/007S8ZIlgy1ge4xrh23pnj30um07m0tx.jpg)
+
+
+
+### 10.5.服务熔断
+
+> 熔断机制是应对雪崩效应的一种微服务链路保护机制。当扇出链路的某个微服务出错不可用或者响应时间太长时,会进行服务的降级，进而熔断该节点微服务的调用,快速返回错误的响应信息。
+> ==当检测到该节点微服务调用响应正常后，恢复调用链路。==
+
+
+
+#### 10.5.1.代码演示
+
+- 在cloud-provider-hystrix-payment8001的PaymentService新增以下代码
+
+```java
+//在10秒窗口期中10次请求有6次是请求失败的,断路器将起作用
+@HystrixCommand(
+  	fallbackMethod = "paymentCircuitBreaker_fallback", commandProperties = {
+    @HystrixProperty(name = "circuitBreaker.enabled", value = "true"),// 是否开启断路器
+    @HystrixProperty(name = "circuitBreaker.requestVolumeThreshold", value = "10"),// 请求次数
+    @HystrixProperty(name = "circuitBreaker.sleepWindowInMilliseconds", value = "10000"),// 时间窗口期，时间范围
+    @HystrixProperty(name = "circuitBreaker.errorThresholdPercentage", value = "60")// 失败率达到多少后跳闸
+})
+public String paymentCircuitBreaker(@PathVariable("id") Integer id) {
+  if (id < 0) {
+    throw new RuntimeException("*****id不能是负数");
+  }
+  String serialNumber = IdUtil.simpleUUID();
+  return Thread.currentThread().getName() + "\t" + "调用成功,流水号:" + serialNumber;
+}
+
+public String paymentCircuitBreaker_fallback(@PathVariable("id") Integer id) {
+  return "id 不能负数,请稍后重试,o(╥﹏╥)o id:" + id;
+}
+```
+
+- 在PaymentController新增如下代码
+
+```java
+//=====服务熔断=====
+@GetMapping("/payment/circuit/{id}")
+public String paymentCircuitBreaker(@PathVariable("id") Integer id){
+    String result = paymentService.paymentCircuitBreaker(id);
+    log.info("****result: "+result);
+    return result;
+}
+```
+
+- 测试
+
+  - 访问http://localhost:8001/payment/circuit/514
+
+  ![image-20200424171727064](https://tva1.sinaimg.cn/large/007S8ZIlgy1ge4z78qxnfj30zo06qta5.jpg)
+
+  - 访问http://localhost:8001/payment/circuit/-514
+
+  ![image-20200424171920936](https://tva1.sinaimg.cn/large/007S8ZIlgy1ge4z97pw4mj30nu06ymy4.jpg)
+
+  - 多次访问http://localhost:8001/payment/circuit/-514，触发服务熔断，此时再次访问http://localhost:8001/payment/circuit/514发现已经无法成功访问，确定此时输入的id是正数514
+
+  ![image-20200424172034249](https://tva1.sinaimg.cn/large/007S8ZIlgy1ge4zai0wodj30nw06wdgt.jpg)
+
+  - 经过一段时间的等待，再次访问http://localhost:8001/payment/circuit/514成功，此时调用链路已经成功恢复。
+
+  ![image-20200424172258522](https://tva1.sinaimg.cn/large/007S8ZIlgy1ge4zebbfnuj30yy06e0u5.jpg)
+
+#### 10.5.2.三个重要参数
+
+==快照时间窗、请求总数阀值、错误百分比阀值==
+
+1. 快照时间窗：断路器确定是否打开需要统计一些请求和错误数据, 而统计的时间范围就是快照时间窗，默认为最近的10秒。
+2. 请求总数阀值：在快照时间窗内，必须满足请求总数阀值才有资格熔断。默认为20,意味着在10秒内，如果该hystrix命令的调用次数不足20次，即使所有的请求都超时或其他原因失败，断路器都不会打开。
+3. 错误百分比阀值：当请求总数在快照时间窗内超过了阀值，比如发生了30次调用,如果在这30次调用中，有15次发生了超时异常，也就是超过50%的错误百分比，在默认设定50%阀值情况下，这时候就会将断路器打开。
+
+
+
+#### 10.5.3.断路器开启或关闭的条件
+
+- 当满足一定的阀值的时候( 默认10秒内超过20个请求次数)
+- 当失败率达到一定的时候(默认10秒内超过50%的请求失败)
+- 到达以上阀值，断路器将会开启
+- 当开启的时候，所有请求都不会进行转发
+- 一段时间之后(默认是5秒)，这个时候断路器是半开状态，会让其中一一个请求进行转发。如果成功，断路器会关闭，若失败，继续开启。重复4和5
+
+
+
+### 10.6.Hystrix图形化
+
+> 创建子模块cloud-consumer-hystrix-dashboard9001
+
+#### 10.6.1.POM文件
+
+```xml
+<dependencies>
+    <dependency>
+        <groupId>org.springframework.cloud</groupId>
+        <artifactId>spring-cloud-starter-netflix-hystrix-dashboard</artifactId>
+    </dependency>
+    <dependency>
+        <groupId>org.springframework.boot</groupId>
+        <artifactId>spring-boot-starter-actuator</artifactId>
+    </dependency>
+    <dependency>
+        <groupId>org.springframework.boot</groupId>
+        <artifactId>spring-boot-devtools</artifactId>
+        <scope>runtime</scope>
+        <optional>true</optional>
+    </dependency>
+    <dependency>
+        <groupId>org.projectlombok</groupId>
+        <artifactId>lombok</artifactId>
+        <optional>true</optional>
+    </dependency>
+    <dependency>
+        <groupId>org.springframework.boot</groupId>
+        <artifactId>spring-boot-starter-test</artifactId>
+        <scope>test</scope>
+    </dependency>
+</dependencies>
+```
+#### 10.6.2.YML文件
+
+```yaml
+server:
+  port: 9001
+```
+
+#### 10.6.3.主启动类
+
+- com.zzx.springcloud.HystrixDashboardMain9001
+
+```java
+@SpringBootApplication
+@EnableHystrixDashboard
+public class HystrixDashboardMain9001 {
+    public static void main(String[] args) {
+        SpringApplication.run(HystrixDashboardMain9001.class, args);
+    }
+}
+```
+
+#### 10.6.4.所有的Provider都需要监控依赖配置
+
+> 8001，8002
+
+```xml
+<dependency>
+    <groupId>org.springframework.boot</groupId>
+    <artifactId>spring-boot-starter-actuator</artifactId>
+</dependency>
+```
+
+#### 10.6.5.访问测试
+
+访问http://localhost:9001/hystrix出现如下图所示页面，则配置成功
+
+![image-20200424183007194](https://tva1.sinaimg.cn/large/007S8ZIlgy1ge51av5oxej31ea0u0k4g.jpg)
+
+#### 10.6.6.修改8001主启动类
+
+- 在cloud-provider-hystrix-payment8001中的PaymentHystrixMain8001新增
+
+```java
+/**
+ *此配置是为了服务监控而配置，与服务容错本身无关，springcloud升级后的坑
+ *ServletRegistrationBean因为springboot的默认路径不是"/hystrix.stream"，
+ *只要在自己的项目里配置上下面的servlet就可以了
+ */
+@Bean
+public ServletRegistrationBean getServlet() {
+    HystrixMetricsStreamServlet streamServlet = new HystrixMetricsStreamServlet();
+    ServletRegistrationBean registrationBean = new ServletRegistrationBean(streamServlet);
+    registrationBean.setLoadOnStartup(1);
+    registrationBean.addUrlMappings("/hystrix.stream");
+    registrationBean.setName("HystrixMetricsStreamServlet");
+    return registrationBean;
+}
+```
+
+#### 10.6.7.配置9001监控8001
+
+填写监控地址http://localhost:8001/hystrix.stream
+
+![image-20200424183816573](https://tva1.sinaimg.cn/large/007S8ZIlgy1ge51jcnx1yj31uq0u04av.jpg)
+
+#### 10.6.8.查看8001微服务
+
+- 多次访问http://localhost:8001/payment/circuit/514的结果
+
+![image-20200424184111854](https://tva1.sinaimg.cn/large/007S8ZIlgy1ge51me26wej31ja0qqjwe.jpg)
+
+- 多次访问http://localhost:8001/payment/circuit/-514的结果
+
+![image-20200424184332492](https://tva1.sinaimg.cn/large/007S8ZIlgy1ge51ouorpcj313c0qewis.jpg)
+
+
+
+
+
+## 11.Gateway网关
+
+### 11.1.三大核心概念
+
+- #### Route(路由)
+
+> 路由是构建网关的基本模块，它由ID,目标URI,一系列的断言和过滤器组成，如果断言为true则匹配该路由
+
+- #### Predicate(断言)
+
+> 参考的是Java8的java.util.function.Prdicate
+> 开发人员可以匹配HTTP请求中的所有内容(例如请求头或请求参数)，如果请求和断言相匹配则进行路由
+
+- #### Filter(过滤)
+
+> 指的是Spring框架中GatewayFilter的实例，使用过滤器可以在请求被路由前或后对请求进行修改
+
+
+
+### 11.2.入门配置
+
+> 新建子模块cloud-gateway-gateway9527
+
+#### 11.2.1.POM文件
+
+```xml
+<dependencies>
+  <!--gateway-->
+  <dependency>
+    <groupId>org.springframework.cloud</groupId>
+    <artifactId>spring-cloud-starter-gateway</artifactId>
+  </dependency>
+  <!--eureka-client-->
+  <dependency>
+    <groupId>org.springframework.cloud</groupId>
+    <artifactId>spring-cloud-starter-netflix-eureka-client</artifactId>
+  </dependency>
+  <!-- 引入自己定义的api通用包，可以使用Payment支付Entity -->
+  <dependency>
+    <groupId>com.zzx.springcloud</groupId>
+    <artifactId>cloud-api-commons</artifactId>
+    <version>${project.version}</version>
+  </dependency>
+  <!--一般基础配置类-->
+  <dependency>
+    <groupId>org.springframework.boot</groupId>
+    <artifactId>spring-boot-devtools</artifactId>
+    <scope>runtime</scope>
+    <optional>true</optional>
+  </dependency>
+  <dependency>
+    <groupId>org.projectlombok</groupId>
+    <artifactId>lombok</artifactId>
+    <optional>true</optional>
+  </dependency>
+  <dependency>
+    <groupId>org.springframework.boot</groupId>
+    <artifactId>spring-boot-starter-test</artifactId>
+    <scope>test</scope>
+  </dependency>
+</dependencies>
+```
+
+#### 11.2.2.YML文件
+
+```yaml
+server:
+  port: 9527
+
+spring:
+  application:
+    name: cloud-gateway
+  cloud:
+    gateway:
+      routes:
+        - id: payment_routh #payment_route    #路由的ID，没有固定规则但要求唯一，建议配合服务名
+          uri: http://localhost:8001          #匹配后提供服务的路由地址
+          predicates:
+            - Path=/payment/get/**         # 断言，路径相匹配的进行路由
+
+        - id: payment_routh2 #payment_route    #路由的ID，没有固定规则但要求唯一，建议配合服务名
+          uri: http://localhost:8001          #匹配后提供服务的路由地址
+          predicates:
+            - Path=/payment/lb/**         # 断言，路径相匹配的进行路由
+            #- After=2020-02-21T15:51:37.485+08:00[Asia/Shanghai]
+            #- Cookie=username,zzyy
+            #- Header=X-Request-Id, \d+  # 请求头要有X-Request-Id属性并且值为整数的正则表达式
+
+eureka:
+  instance:
+    hostname: cloud-gateway-service
+  client: #服务提供者provider注册进eureka服务列表内
+    service-url:
+      register-with-eureka: true
+      fetch-registry: true
+      defaultZone: http://eureka7001.com:7001/eureka
+```
+
+#### 11.2.3.主启动类GateWayMain9527
+
+com.zzx.springcloud.GateWayMain9527
+
+```java
+@SpringBootApplication
+@EnableEurekaClient
+public class GateWayMain9527 {
+    public static void main(String[] args) {
+        SpringApplication.run(GateWayMain9527.class, args);
+    }
+}
+```
+
+#### 11.2.4.测试
+
+- 添加网关前，访问http://localhost:8001/payment/get/514
+
+![image-20200424194833077](https://tva1.sinaimg.cn/large/007S8ZIlgy1ge53kgtc87j30rs0gijt9.jpg)
+
+- 添加网关后，访问http://localhost:9527/payment/get/514
+
+![image-20200424194910490](https://tva1.sinaimg.cn/large/007S8ZIlgy1ge53l45ojtj30s40gk0um.jpg)
+
+
+
+### 11.3.通过微服务名实现动态路由
+
+> 默认情况下Gateway会根据注册中心的注册列表，以注册中心上微服务名为路径创建动态路由进行转发，从而实现动态路由的功能
+
+#### 11.3.1.前提条件
+
+需要启动一个eureka7001和两个微服务提供者8001和8002
+
+#### 11.3.2.POM文件
+
+需要引入
+
+```xml
+<dependency>
+    <groupId>org.springframework.cloud</groupId>
+    <artifactId>spring-cloud-starter-netflix-eureka-client</artifactId>
+</dependency>
+```
+
+#### 11.3.3.YML文件
+
+修改9527YML配置文件，修改后的YML如下
+
+```yaml
+server:
+  port: 9527
+
+spring:
+  application:
+    name: cloud-gateway
+  cloud:
+    gateway:
+      discovery:
+        locator:
+          enabled: true #开启从注册中心动态创建路由的功能，利用微服务名进行路由
+      routes:
+        - id: payment_routh #payment_route    #路由的ID，没有固定规则但要求唯一，建议配合服务名
+          #uri: http://localhost:8001         #匹配后提供服务的路由地址
+          uri: lb://cloud-payment-service #匹配后提供服务的路由地址
+          predicates:
+            - Path=/payment/get/**         # 断言，路径相匹配的进行路由
+
+        - id: payment_routh2 #payment_route    #路由的ID，没有固定规则但要求唯一，建议配合服务名
+          #uri: http://localhost:8001          #匹配后提供服务的路由地址
+          uri: lb://cloud-payment-service #匹配后提供服务的路由地址
+          predicates:
+            - Path=/payment/lb/**         # 断言，路径相匹配的进行路由
+            #- After=2020-02-21T15:51:37.485+08:00[Asia/Shanghai]
+            #- Cookie=username,zzyy
+            #- Header=X-Request-Id, \d+  # 请求头要有X-Request-Id属性并且值为整数的正则表达式
+
+eureka:
+  instance:
+    hostname: cloud-gateway-service
+  client: #服务提供者provider注册进eureka服务列表内
+    service-url:
+      register-with-eureka: true
+      fetch-registry: true
+      defaultZone: http://eureka7001.com:7001/eureka
+```
+
+#### 11.3.4.测试
+
+访问http://localhost:9527/payment/lb，可以看到8001和8002端口在依次切换
+
+![image-20200424202057100](https://tva1.sinaimg.cn/large/007S8ZIlgy1ge54i6awxkj30lc07egm9.jpg)
+
+![image-20200424202145099](https://tva1.sinaimg.cn/large/007S8ZIlgy1ge54j09f6tj30l008a74x.jpg)
+
+
+
+### 11.4.Predicate的使用
+
+#### 11.4.1.After Route Predicate
+
+- 在yml中新增配置，下面这段配置是只有在After后面配置的时间之后的访问才有效
+
+```yaml
+spring:
+  cloud:
+    gateway:
+      routes:
+          predicates:
+          	#这个时间是由ZonedDateTime.now()得到的
+            - After=2020-04-24T20:32:39.605+08:00[Asia/Shanghai]
+```
+
+- 如果将时间从8:32修改到9:32，这样访问肯定不会在9:32之后，页面会报404异常
+
+![image-20200424203805944](https://tva1.sinaimg.cn/large/007S8ZIlgy1ge5500snjlj31fw0l4wkd.jpg)
+
+#### 11.4.2.Before Route Predicate
+
+> Before和After同理这里不再赘述和实验了
+
+#### 11.4.3.Between Route Predicate
+
+> Between和After同理，唯一不同的是Between需要两个时间，即一个时间范围。
+
+#### 11.4.4.Cookie Route Predicate
+
+> Cookie Route Predicate需要两个参数，一个是Cookie name，一个是正则表达式
+>
+> 路由规则会通过获取相应的Cookie name值和正则表达式去匹配，如果匹配上就会执行路由，反之则不执行
+
+- 在YML中新增配置，这段配置是只有带着username-zzx键值对来才能成功访问
+
+```yaml
+spring:
+  cloud:
+    gateway:
+      routes:
+          predicates:
+            - Cookie=username,zzx
+```
+
+- 在终端中使用`curl http://localhost:9527/payment/lb`命令来访问，发现也报了404error
+
+![image-20200424205116098](https://tva1.sinaimg.cn/large/007S8ZIlgy1ge55dq5r95j313m09utck.jpg)
+
+- 当请求路径后加了cookie并且符合上面配置的格式，成功返回了8001和8002端口
+
+![image-20200424205444049](https://tva1.sinaimg.cn/large/007S8ZIlgy1ge55hbsu5qj30ve04gq3z.jpg)
+
+#### 11.4.5.Header Route Predicate
+
+> 两个参数：一个是属性名称一个是正则表达式，这个属性值和正则表达式匹配执行
+
+- 在YML文件中新增配置，该配置要求请求头要有X-Request-Id属性并且值为整数，\d+是正则表达式
+
+```yaml
+spring:
+  cloud:
+    gateway:
+      routes:
+          predicates:
+          	- Header=X-Request-Id, \d+  
+```
+
+- 访问测试，由此可见只有请求路径带上符合正则表达式的请求头才能成功访问，否则又是404
+
+![image-20200424210052388](https://tva1.sinaimg.cn/large/007S8ZIlgy1ge55nq5gqpj30v406oq61.jpg)
+
+#### 11.4.6.Host Route Predicate
+
+#### 11.4.7.Method Route Predicate
+
+#### 11.4.8.Path Route Predicate
+
+> Path就是已经配置的那个Path
+
+#### 11.4.9.Query Route Predicate
+
+
+
+### 11.5.Filter的使用
+
+。。。
+
+
+
+## 12.SpringCloud Config
+
+> 简介：在分布式系统中，由于服务数量巨多，为了方便服务配置文件统一管理，实时更新，所以需要分布式配置中心组件。Spring Cloud Config项目是就是这样一个解决分布式系统的配置管理方案。它包含了Client和Server两个部分，server提供配置文件的存储、以接口的形式将配置文件的内容提供出去，client通过接口获取数据、并依据此数据初始化自己的应用。
+
+SpringCloud Config为微服务架构中的微服务提供集中化的外部配置支持，配置服务器为==各个不同微服务应用==的所有环境提供了一个==中心化的外部配置==。
+
+
+
+- SpringCloud Config作用
+  - 集中管理配置文件
+  - 不同环境不同配置，动态化的配置更新,分环境部署比如dev/test/prod/beta/release
+  - 运行期间动态调整配置，不再需要在每个服务部署的机器.上编写配置文件，服务会向配置中心统一拉取配置自己的信息
+  - 当配置发生变动时，服务不需要重启即可感知到配置的变化并应用新的配置
+  - 将配置信息以REST接口的形式暴露
+
+
+
+### 12.1.Config服务端配置
+
+#### 12.1.1.新建远程仓库
+
+> 在GitHub上新建一个名为springcloud-config的Repository
+
+#### 12.1.2.获取git地址
+
+> HTTPS:https://github.com/cuteSatomi/springcloud-config.git
+>
+> SSH:git@github.com:cuteSatomi/springcloud-config.git
+
+
+
+==**新建子模块cloud-config-center3344**==
+
+
+
+#### 12.1.3.POM文件
+
+```xml
+<dependencies>
+    <dependency>
+        <groupId>org.springframework.cloud</groupId>
+        <artifactId>spring-cloud-config-server</artifactId>
+    </dependency>
+    <dependency>
+        <groupId>org.springframework.cloud</groupId>
+        <artifactId>spring-cloud-starter-netflix-eureka-client</artifactId>
+    </dependency>
+    <dependency>
+        <groupId>org.springframework.boot</groupId>
+        <artifactId>spring-boot-starter-web</artifactId>
+    </dependency>
+
+    <dependency>
+        <groupId>org.springframework.boot</groupId>
+        <artifactId>spring-boot-starter-actuator</artifactId>
+    </dependency>
+    <dependency>
+        <groupId>org.springframework.boot</groupId>
+        <artifactId>spring-boot-devtools</artifactId>
+        <scope>runtime</scope>
+        <optional>true</optional>
+    </dependency>
+    <dependency>
+        <groupId>org.projectlombok</groupId>
+        <artifactId>lombok</artifactId>
+        <optional>true</optional>
+    </dependency>
+    <dependency>
+        <groupId>org.springframework.boot</groupId>
+        <artifactId>spring-boot-starter-test</artifactId>
+        <scope>test</scope>
+    </dependency>
+</dependencies>
+```
+#### 12.1.4.YML文件
+
+```yaml
+server:
+  port: 3344
+
+spring:
+  application:
+    name:  cloud-config-center #注册进Eureka服务器的微服务名
+  cloud:
+    config:
+      server:
+        git:
+        	#这里的uri使用SSH会报错，只能用https，是什么原因目前还没搞清楚
+          uri: https://github.com/cuteSatomi/springcloud-config.git #GitHub上面的git仓库名字
+          ####搜索目录
+          search-paths:
+            - springcloud-config
+      ####读取分支
+      label: master
+
+#服务注册到eureka地址
+eureka:
+  client:
+    service-url:
+      defaultZone: http://eureka7001.com:7001/eureka
+```
+
+#### 12.1.5.主启动类ConfigCenterMain3344
+
+- com.zzx.springcloud.ConfigCenterMain3344
+
+```java
+@SpringBootApplication
+@EnableConfigServer
+public class ConfigCenterMain3344 {
+    public static void main(String[] args) {
+        SpringApplication.run(ConfigCenterMain3344.class, args);
+    }
+}
+```
+
+#### 12.1.6.在/etc/hosts下新增映射
+
+```
+127.0.0.1	config-3344.com
+```
+
+#### 12.1.7.上传配置文件到GitHub
+
+- 初始化本地仓库
+
+![image-20200425131909093](https://tva1.sinaimg.cn/large/007S8ZIlgy1ge5xxn5qq3j313u01q3z2.jpg)
+
+- 新建config-dev.yml并提交到本地库
+
+![image-20200425131958187](https://tva1.sinaimg.cn/large/007S8ZIlgy1ge5xyg6xorj317803un1k.jpg)
+
+- 新建远程仓库地址别名
+
+![image-20200425132054090](https://tva1.sinaimg.cn/large/007S8ZIlgy1ge5xzf8n3nj31je04cdil.jpg)
+
+- 推送到远程库
+
+![image-20200425132122712](https://tva1.sinaimg.cn/large/007S8ZIlgy1ge5xzxv2bnj310607ymz8.jpg)
+
+- 查看远程库上传成功
+
+![image-20200425132203163](https://tva1.sinaimg.cn/large/007S8ZIlgy1ge5y0mj6euj31jc0ko0x8.jpg)
+
+#### 12.1.8.读取配置规则
+
+> Spring Cloud Config 有它的一套访问规则，我们通过这套规则在浏览器上直接访问就可以。
+
+```
+/{application}/{profile}[/{label}]
+/{application}-{profile}.yml
+/{label}/{application}-{profile}.yml
+/{application}-{profile}.properties
+/{label}/{application}-{profile}.properties
+```
+
+{application} 就是应用名称，对应到配置文件上来，就是配置文件的名称部分，例如上面创建的配置文件。
+
+{profile} 就是配置文件的版本，我们的项目有开发版本、测试环境版本、生产环境版本，对应到配置文件上来就是以 application-{profile}.yml 加以区分，例如application-dev.yml、application-sit.yml、application-prod.yml。
+
+{label} 表示 git 分支，默认是 master 分支，如果项目是以分支做区分也是可以的，那就可以通过不同的 label 来控制访问不同的配置文件了。
+
+#### 12.1.9.访问测试
+
+- 访问http://config-3344.com:3344/master/config-dev.yml成功看到了config-dev.yml的内容
+
+![image-20200425133746069](https://tva1.sinaimg.cn/large/007S8ZIlgy1ge5ygyxuwaj30v8076q48.jpg)
+
+
+
+### 12.2.Config客户端配置
+
+> 新建子模块cloud-config-client3355
+
+#### 12.2.1.POM文件
+
+```xml
+<dependencies>
+    <dependency>
+        <groupId>org.springframework.cloud</groupId>
+        <artifactId>spring-cloud-starter-config</artifactId>
+    </dependency>
+    <dependency>
+        <groupId>org.springframework.cloud</groupId>
+        <artifactId>spring-cloud-starter-netflix-eureka-client</artifactId>
+    </dependency>
+    <dependency>
+        <groupId>org.springframework.boot</groupId>
+        <artifactId>spring-boot-starter-web</artifactId>
+    </dependency>
+    <dependency>
+        <groupId>org.springframework.boot</groupId>
+        <artifactId>spring-boot-starter-actuator</artifactId>
+    </dependency>
+    <dependency>
+        <groupId>org.springframework.boot</groupId>
+        <artifactId>spring-boot-devtools</artifactId>
+        <scope>runtime</scope>
+        <optional>true</optional>
+    </dependency>
+    <dependency>
+        <groupId>org.projectlombok</groupId>
+        <artifactId>lombok</artifactId>
+        <optional>true</optional>
+    </dependency>
+    <dependency>
+        <groupId>org.springframework.boot</groupId>
+        <artifactId>spring-boot-starter-test</artifactId>
+        <scope>test</scope>
+    </dependency>
+</dependencies>
+```
+#### 12.2.2.YML文件
+
+> application.yml是用户级的资源配置项
+>
+> bootstrap.yml是系统级的，优先级更高
+>
+> 因此要将Client模块下的application.yml改为bootstrap.yml，因为bootstrap.yml是比application.yml先加载的。
+
+```yaml
+server:
+  port: 3355
+
+spring:
+  application:
+    name: config-client
+  cloud:
+    #Config客户端配置
+    config:
+      label: master #分支名称
+      name: config #配置文件名称
+      profile: dev #读取后缀名称   上述3个综合：master分支上config-dev.yml的配置文件被读取http://config-3344.com:3344/master/config-dev.yml
+      uri: http://localhost:3344 #配置中心地址k
+
+#服务注册到eureka地址
+eureka:
+  client:
+    service-url:
+      defaultZone: http://eureka7001.com:7001/eureka
+```
+
+#### 12.2.3.主启动类
+
+- com.zzx.springcloud.ConfigClientMain3355
+
+```java
+@SpringBootApplication
+@EnableEurekaClient
+public class ConfigClientMain3355 {
+    public static void main(String[] args) {
+        SpringApplication.run(ConfigClientMain3355.class, args);
+    }
+}
+```
+
+#### 12.2.4.controller层
+
+- com.zzx.springcloud.controller.ConfigClientController
+
+```java
+@RestController
+public class ConfigClientController {
+
+    @Value("${config.info}")
+    private String configInfo;
+
+    @GetMapping("/configInfo")
+    public String getConfigInfo() {
+        return configInfo;
+    }
+}
+```
+
+#### 12.2.5.访问测试
+
+通过3355客户端访问服务器成功访问到了config-dev.yml下的config.info内容
+
+http://localhost:3355/configInfo
+
+![image-20200425171251294](https://tva1.sinaimg.cn/large/007S8ZIlgy1ge64oryr49j30qe06mt9p.jpg)
+
+### 12.3.分布式配置的动态刷新问题
+
+#### 12.3.1.修改config-dev.yml
+
+> 将版本从1更新到2
+
+![image-20200425172118237](https://tva1.sinaimg.cn/large/007S8ZIlgy1ge64xkait4j30u60cu402.jpg)
+
+#### 12.3.2.刷新3344发现已经响应
+
+http://config-3344.com:3344/master/config-dev.yml
+
+![image-20200425172240526](https://tva1.sinaimg.cn/large/007S8ZIlgy1ge64yzadkjj30v406wmyg.jpg)
+
+#### 12.3.3.刷新3355发现仍为旧值
+
+http://localhost:3355/configInfo，3355除非重新加载或者重启，否则无法读取修改后的配置文件，重启后重新访问，发现才读取到了最新的配置
+
+![image-20200425173008444](https://tva1.sinaimg.cn/large/007S8ZIlgy1ge656r7o0kj30qk06c75a.jpg)
+
+### 12.4.动态刷新问题的解决
+
+> 避免每次修改配置都需要重新启动微服务3355，需要修改cloud-config-client3355模块
+
+#### 12.4.1.POM引入actuator监控
+
+```xml
+<dependency>
+    <groupId>org.springframework.boot</groupId>
+    <artifactId>spring-boot-starter-actuator</artifactId>
+</dependency>
+```
+
+#### 12.4.2.修改YML，暴露监控端口
+
+> 在YML文件新增配置，以下配置直接配置在根结点上
+
+```yaml
+# 暴露监控端点
+management:
+  endpoints:
+    web:
+      exposure:
+        include: "*"
+```
+
+#### 12.4.3.修改ConfigClientController
+
+> 在ConfigClientController类上新增注解@RefreshScope
+
+#### 12.4.4.重启3355后修改config-dev.yml
+
+> 修改config-dev.yml版本号为3
+
+![image-20200425173708323](https://tva1.sinaimg.cn/large/007S8ZIlgy1ge65e11b0wj30wa0cymyr.jpg)
+
+#### 12.4.5.进行测试
+
+- 访问http://config-3344.com:3344/master/config-dev.yml，发现读取到的是最新的version3的配置
+
+![image-20200425173850054](https://tva1.sinaimg.cn/large/007S8ZIlgy1ge65fsqr4nj30uw06k75k.jpg)
+
+- 访问http://localhost:3355/configInfo，发现读取到的还是version=2，配置并没有生效
+
+![image-20200425173008444](https://tva1.sinaimg.cn/large/007S8ZIlgy1ge656r7o0kj30qk06c75a.jpg)
+
+#### 12.4.6.需要发送POST请求
+
+> 动态刷新的前提是修改配置后需要发送一个POST请求来刷新3355
+
+curl -X POST "http://localhost:3355/actuator/refresh"
+
+![image-20200425175259232](https://tva1.sinaimg.cn/large/007S8ZIlgy1ge65uvh6iej30ro01mweu.jpg)
+
+#### 12.4.7.再次访问测试
+
+访问http://localhost:3355/configInfo发现成功读取到了版本3的配置
+
+![image-20200425175207559](https://tva1.sinaimg.cn/large/007S8ZIlgy1ge65vzl3adj30qe0680tq.jpg)
