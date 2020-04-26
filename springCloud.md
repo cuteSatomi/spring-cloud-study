@@ -420,7 +420,7 @@ public class PaymentServiceImpl implements com.zzx.springcloud.service.PaymentSe
 
 #### 4.2.9.Controller层
 
-- com.zzx.springcloud.controller.PaymentController
+- com.zzx.springcloud.com.zzx.springcloud.controller.PaymentController
 
 ```java
 @RestController
@@ -605,7 +605,7 @@ public class ApplicationContextConfig {
 
 #### 4.4.6.Controller层
 
-- com.zzx.springcloud.controller.OrderController
+- com.zzx.springcloud.com.zzx.springcloud.controller.OrderController
 
 ```java
 @RestController
@@ -1177,7 +1177,7 @@ public class PaymentMain8006 {
 
 #### 6.2.4.Controller层
 
-- com.zzx.springcloud.controller.PaymentController
+- com.zzx.springcloud.com.zzx.springcloud.controller.PaymentController
 
 ```java
 @RestController
@@ -1297,7 +1297,7 @@ public class ApplicationContextConfig {
 
 #### 6.3.5.Controller层
 
-- com.zzx.springcloud.controller.OrderConsulController
+- com.zzx.springcloud.com.zzx.springcloud.controller.OrderConsulController
 
 ```java
 @RestController
@@ -1609,7 +1609,7 @@ public interface PaymentFeignService {
 
 #### 9.1.5.Controller层
 
-- com.zzx.springcloud.controller.OrderFeignController
+- com.zzx.springcloud.com.zzx.springcloud.controller.OrderFeignController
 
 ```java
 @RestController
@@ -1884,7 +1884,7 @@ public class PaymentService {
 
 #### 10.1.5.Controller层
 
-- com.zzx.springcloud.controller.PaymentController
+- com.zzx.springcloud.com.zzx.springcloud.controller.PaymentController
 
 ```java
 @RestController
@@ -2038,7 +2038,7 @@ public interface PaymentHystrixService {
 
 #### 10.3.5.Controller层
 
-- com.zzx.springcloud.controller.OrderHystrixController
+- com.zzx.springcloud.com.zzx.springcloud.controller.OrderHystrixController
 
 ```java
 @RestController
@@ -2993,7 +2993,7 @@ public class ConfigClientMain3355 {
 
 #### 12.2.4.controller层
 
-- com.zzx.springcloud.controller.ConfigClientController
+- com.zzx.springcloud.com.zzx.springcloud.controller.ConfigClientController
 
 ```java
 @RestController
