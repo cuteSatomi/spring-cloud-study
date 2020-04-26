@@ -420,7 +420,7 @@ public class PaymentServiceImpl implements com.zzx.springcloud.service.PaymentSe
 
 #### 4.2.9.Controller层
 
-- com.zzx.springcloud.com.zzx.springcloud.controller.PaymentController
+- com.zzx.springcloud.controller.PaymentController
 
 ```java
 @RestController
@@ -605,7 +605,7 @@ public class ApplicationContextConfig {
 
 #### 4.4.6.Controller层
 
-- com.zzx.springcloud.com.zzx.springcloud.controller.OrderController
+- com.zzx.springcloud.controller.OrderController
 
 ```java
 @RestController
@@ -1177,7 +1177,7 @@ public class PaymentMain8006 {
 
 #### 6.2.4.Controller层
 
-- com.zzx.springcloud.com.zzx.springcloud.controller.PaymentController
+- com.zzx.springcloud.controller.PaymentController
 
 ```java
 @RestController
@@ -1297,7 +1297,7 @@ public class ApplicationContextConfig {
 
 #### 6.3.5.Controller层
 
-- com.zzx.springcloud.com.zzx.springcloud.controller.OrderConsulController
+- com.zzx.springcloud.controller.OrderConsulController
 
 ```java
 @RestController
@@ -1609,7 +1609,7 @@ public interface PaymentFeignService {
 
 #### 9.1.5.Controller层
 
-- com.zzx.springcloud.com.zzx.springcloud.controller.OrderFeignController
+- com.zzx.springcloud.controller.OrderFeignController
 
 ```java
 @RestController
@@ -1884,7 +1884,7 @@ public class PaymentService {
 
 #### 10.1.5.Controller层
 
-- com.zzx.springcloud.com.zzx.springcloud.controller.PaymentController
+- com.zzx.springcloud.controller.PaymentController
 
 ```java
 @RestController
@@ -2038,7 +2038,7 @@ public interface PaymentHystrixService {
 
 #### 10.3.5.Controller层
 
-- com.zzx.springcloud.com.zzx.springcloud.controller.OrderHystrixController
+- com.zzx.springcloud.controller.OrderHystrixController
 
 ```java
 @RestController
@@ -2993,7 +2993,7 @@ public class ConfigClientMain3355 {
 
 #### 12.2.4.controller层
 
-- com.zzx.springcloud.com.zzx.springcloud.controller.ConfigClientController
+- com.zzx.springcloud.controller.ConfigClientController
 
 ```java
 @RestController
@@ -3096,3 +3096,541 @@ curl -X POST "http://localhost:3355/actuator/refresh"
 访问http://localhost:3355/configInfo发现成功读取到了版本3的配置
 
 ![image-20200425175207559](https://tva1.sinaimg.cn/large/007S8ZIlgy1ge65vzl3adj30qe0680tq.jpg)
+
+
+
+## 13.Bus消息中心
+
+> Bus支持两种消息代理：RabbitMQ和Kafka
+
+==**什么是总线**==
+在微服务架构的系统中，通常会使用轻量级的消息代理来构建一个共用的消息主题, 并让系统中所有微服务实例都连接上来。由于该主题中产生的消息会被所有实例监听和消费，所以称它为消息总线。在总线上的各个实例，都可以方便地广播一些需要让其他连接在该主题上的实例都知道的消息。
+==**基本原理**==
+ConfigClient实例都监听MQ中同一个topic(默认是springCloudBus)。 当一个服务刷新数据的时候，它会把这个信息放入到Topic中，这样其它监听同一Topic的服务就能得到通知，然后去更新自身的配置。
+
+
+
+### 13.1.RabbitMQ
+
+==启动RabbitMQ==
+
+![image-20200425184513987](https://tva1.sinaimg.cn/large/007S8ZIlgy1ge67cwa04ej31q80lk7i8.jpg)
+
+
+
+### 13.2.Bus动态刷新全局广播
+
+> 参考3355再新建一个cloud-config-client3366
+
+- com.zzx.springcloud.controller.ConfigClientController
+
+```java
+@RestController
+@RefreshScope
+public class ConfigClientController {
+
+    @Value("${server.port}")
+    private String serverPort;
+
+    @Value("${config.info}")
+    private String configInfo;
+
+    @GetMapping("/configInfo")
+    public String getConfigInfo() {
+        return "serverPort: " + serverPort + "\t\n\n configInfo: " + configInfo;
+    }
+}
+```
+
+
+
+#### 13.2.1.设计思想
+
+- 利用消息总线触发一个客户端bus/refresh从而刷新所有客户端的配置
+- 利用消息总线触发一个服务端ConfigServer的/bus/refresh端点，从而刷新所有客户端的配置
+
+经过分析选择第二种架构方式，具体的原因如下：
+
+1. 打破了微服务的职责单一性，因为微服务本身是业务模块，它本不应该承担配置刷新的职责。
+2. 破坏了微服务各节点的对等性。
+3. 有一定的局限性。例如，微服务在迁移时，它的网络地址常常会发生变化，此时如果想要做到自动刷新,那就会增加更多的配置。
+
+
+
+#### 13.2.2.给服务端添加消息总线支持
+
+> 修改cloud-config-center3344的POM文件和YML文件
+
+- 在POM文件新增配置
+
+```xml
+<!--添加消息总线RabbitMQ支持-->
+<dependency>
+    <groupId>org.springframework.cloud</groupId>
+    <artifactId>spring-cloud-starter-bus-amqp</artifactId>
+</dependency>
+```
+
+- 在YML文件新增配置(在根结点下新增配置)
+
+```yaml
+#rabbitmq相关配置
+spring: 
+  rabbitmq:
+    host: localhost
+    port: 5672
+    username: guest
+    password: guest
+
+##rabbitmq相关配置,暴露bus刷新配置的端点
+management:
+  endpoints: #暴露bus刷新配置的端点
+    web:
+      exposure:
+        include: 'bus-refresh'
+```
+
+#### 13.2.3.给客户端添加消息总线支持
+
+> 分别修改cloud-config-client3355和cloud-config-client3366的POM文件和YML文件
+
+- POM文件新增配置
+
+```xml
+<!--添加消息总线RabbitMQ支持-->
+<dependency>
+    <groupId>org.springframework.cloud</groupId>
+    <artifactId>spring-cloud-starter-bus-amqp</artifactId>
+</dependency>
+```
+
+- YML文件新增配置
+
+```yaml
+#rabbitmq相关配置 15672是Web管理界面的端口；5672是MQ访问的端口
+spring:
+  rabbitmq:
+    host: localhost
+    port: 5672
+    username: guest
+    password: guest
+```
+
+#### 13.2.4.测试
+
+- 先启动7001，3344，3355，3366
+- 修改config-dev.yml为version=5
+
+![image-20200425192218674](https://tva1.sinaimg.cn/large/007S8ZIlgy1ge68fh1b8gj30xe0dq409.jpg)
+
+- 对服务端进行测试，访问http://config-3344.com:3344/config-dev.yml发现version是5
+
+![image-20200425193100309](https://tva1.sinaimg.cn/large/007S8ZIlgy1ge68oifsp7j30ue06sdh2.jpg)
+
+- 由于我们还没有通过POST请求来对3355和3366进行刷新，所以3355和3366的版本号应该还是4
+
+![image-20200425193221677](https://tva1.sinaimg.cn/large/007S8ZIlgy1ge68px054yj30qm06e75b.jpg)
+
+![image-20200425193709686](https://tva1.sinaimg.cn/large/007S8ZIlgy1ge68uxa0p4j3120066myi.jpg)
+
+- 发送POST请求curl -X POST "http://localhost:3344/actuator/bus-refresh"
+
+![image-20200425194026859](https://tva1.sinaimg.cn/large/007S8ZIlgy1ge68youodbj30t8026gm0.jpg)
+
+- 重新测试两个客户端，版本号已经成功变为了5
+
+![image-20200425194126707](https://tva1.sinaimg.cn/large/007S8ZIlgy1ge68zdab2vj30qe06cwfh.jpg)
+
+![image-20200425194201548](https://tva1.sinaimg.cn/large/007S8ZIlgy1ge68zzfhm7j3120068ta0.jpg)
+
+
+
+- 此时打开rabbitmq可以看到springcloud的bus总线
+
+http://localhost:15672/#/exchanges
+
+![image-20200425194802915](https://tva1.sinaimg.cn/large/007S8ZIlgy1ge6969nymwj30y60pwadp.jpg)
+
+
+
+### 13.3.Bus动态刷新定点通知
+
+- 修改config-dev.yml为version=6
+
+- 只通知3355而不通知3366，curl -X POST "http://localhost:3344/actuator/bus-refresh/config-client:3355"
+
+![image-20200425200045227](https://tva1.sinaimg.cn/large/007S8ZIlgy1ge69jgpdmrj310k02emxl.jpg)
+
+- 访问测试
+
+  - http://localhost:3355/configInfo，version为6
+
+  ![image-20200425200124053](https://tva1.sinaimg.cn/large/007S8ZIlgy1ge69k5bujwj30qq07adgv.jpg)
+
+  - http://localhost:3366/configInfo，version为5
+
+  ![image-20200425200139052](https://tva1.sinaimg.cn/large/007S8ZIlgy1ge69kku8q5j312a06c3zx.jpg)
+
+
+
+## 14.SpringCloud Stream
+
+**问题**：为什么要引入SpringCloud Stream
+
+**举例**：对于我们Java程序员来说，可能有时要使用ActiveMQ,有时要使用RabbitMQ,甚至还有RocketMQ以及Kafka，这之间的切换似乎很麻烦，我们很难，也没有太多时间去精通每一门技术，那有没有一种新技术的诞生，让我们不再关注具体MQ的细节，自动的给我们在各种MQ内切换。
+
+**简介**：Spring Cloud Stream 是一个用来为微服务应用构建消息驱动能力的框架。它可以基于 Spring Boot 来创建独立的、可用于生产的 Spring 应用程序。Spring Cloud Stream 为一些供应商的消息中间件产品提供了个性化的自动化配置实现，并引入了发布-订阅、消费组、分区这三个核心概念。通过使用 Spring Cloud Stream，可以有效简化开发人员对消息中间件的使用复杂度，让系统开发人员可以有更多的精力关注于核心业务逻辑的处理。但是目前 Spring Cloud Stream 只支持 RabbitMQ 和 Kafka 的自动化配置。
+
+==一句话：屏蔽底层消息中间件的差异，降低切换成本，统一消息的编程模型。==
+
+
+
+### 14.1.消息驱动生产者构建
+
+> 新建子模块cloud-stream-rabbitmq-provider8801
+
+#### 14.1.1.POM文件
+
+```xml
+<dependencies>
+  <dependency>
+    <groupId>org.springframework.boot</groupId>
+    <artifactId>spring-boot-starter-web</artifactId>
+  </dependency>
+  <dependency>
+    <groupId>org.springframework.boot</groupId>
+    <artifactId>spring-boot-starter-actuator</artifactId>
+  </dependency>
+  <dependency>
+    <groupId>org.springframework.cloud</groupId>
+    <artifactId>spring-cloud-starter-netflix-eureka-client</artifactId>
+  </dependency>
+  <dependency>
+    <groupId>org.springframework.cloud</groupId>
+    <artifactId>spring-cloud-starter-stream-rabbit</artifactId>
+  </dependency>
+  <!--基础配置-->
+  <dependency>
+    <groupId>org.springframework.boot</groupId>
+    <artifactId>spring-boot-devtools</artifactId>
+    <scope>runtime</scope>
+    <optional>true</optional>
+  </dependency>
+  <dependency>
+    <groupId>org.projectlombok</groupId>
+    <artifactId>lombok</artifactId>
+    <optional>true</optional>
+  </dependency>
+  <dependency>
+    <groupId>org.springframework.boot</groupId>
+    <artifactId>spring-boot-starter-test</artifactId>
+    <scope>test</scope>
+  </dependency>
+</dependencies>
+```
+
+#### 14.1.2.YML文件
+
+```yaml
+server:
+  port: 8801
+
+spring:
+  application:
+    name: cloud-stream-provider
+  cloud:
+    stream:
+      binders: # 在此处配置要绑定的rabbitmq的服务信息；
+        defaultRabbit: # 表示定义的名称，用于于binding整合
+          type: rabbit # 消息组件类型
+          environment: # 设置rabbitmq的相关的环境配置
+            spring:
+              rabbitmq:
+                host: localhost
+                port: 5672
+                username: guest
+                password: guest
+      bindings: # 服务的整合处理
+        output: # 这个名字是一个通道的名称
+          destination: studyExchange # 表示要使用的Exchange名称定义
+          content-type: application/json # 设置消息类型，本次为json，文本则设置“text/plain”
+          binder: defaultRabbit # 设置要绑定的消息服务的具体设置
+
+eureka:
+  client: # 客户端进行Eureka注册的配置
+    service-url:
+      defaultZone: http://eureka7001.com:7001/eureka
+  instance:
+    lease-renewal-interval-in-seconds: 2 # 设置心跳的时间间隔（默认是30秒）
+    lease-expiration-duration-in-seconds: 5 # 如果现在超过了5秒的间隔（默认是90秒）
+    instance-id: send-8801.com  # 在信息列表时显示主机名称
+    prefer-ip-address: true     # 访问的路径变为IP地址
+```
+
+#### 14.1.3.主启动类StreamMQMain8801
+
+- com.zzx.springcloud.StreamMQMain8801
+
+```java
+@SpringBootApplication
+public class StreamMQMain8801 {
+    public static void main(String[] args) {
+        SpringApplication.run(StreamMQMain8801.class, args);
+    }
+}
+```
+
+#### 14.1.4.Service层
+
+- MessageProvider接口
+
+  com.zzx.springcloud.service.MessageProvider
+
+```java
+public interface MessageProvider {
+    public String send();
+}
+```
+
+- MessageProviderImpl实现类
+
+  com.zzx.springcloud.service.impl.MessageProviderImpl
+
+```java
+@EnableBinding(Source.class)//定义消息的推送广告
+public class MessageProviderImpl implements MessageProvider {
+
+    @Resource
+    private MessageChannel output; //消息发送管道
+
+    @Override
+    public String send() {
+        String serial = UUID.randomUUID().toString();
+        output.send(MessageBuilder.withPayload(serial).build());
+        System.out.println("******serial: "+serial);
+        return null;
+    }
+}
+```
+
+#### 14.1.5.Controller层
+
+- com.zzx.springcloud.controller.SendMessageController
+
+```java
+@RestController
+public class SendMessageController {
+
+    @Resource
+    private MessageProvider messageProvider;
+
+    @GetMapping("/sendMessage")
+    public String sendMessage(){
+        return messageProvider.send();
+    }
+}
+```
+
+#### 14.1.6.测试
+
+- 可以看到Exchanges中出现了我们在YML中配置的studyExchange
+
+![image-20200425211026106](https://tva1.sinaimg.cn/large/007S8ZIlgy1ge6bjzl0e9j30ud0u0gpu.jpg)
+
+- 连续访问http://localhost:8801/sendMessage，再再studyExchange中查看访问出现了波峰，而且一段时间后趋于平静，说明整合成功
+
+![image-20200425211232303](https://tva1.sinaimg.cn/large/007S8ZIlgy1ge6bm5ubh6j30x20myq51.jpg)
+
+
+
+### 14.2.消息驱动消费者构建
+
+> 新建子模块cloud-stream-rabbitmq-consumer8802
+
+#### 14.2.1.POM文件
+
+```xml
+<dependencies>
+    <dependency>
+        <groupId>org.springframework.boot</groupId>
+        <artifactId>spring-boot-starter-web</artifactId>
+    </dependency>
+    <dependency>
+        <groupId>org.springframework.cloud</groupId>
+        <artifactId>spring-cloud-starter-netflix-eureka-client</artifactId>
+    </dependency>
+    <dependency>
+        <groupId>org.springframework.cloud</groupId>
+        <artifactId>spring-cloud-starter-stream-rabbit</artifactId>
+    </dependency>
+    <dependency>
+        <groupId>org.springframework.boot</groupId>
+        <artifactId>spring-boot-starter-actuator</artifactId>
+    </dependency>
+    <!--基础配置-->
+    <dependency>
+        <groupId>org.springframework.boot</groupId>
+        <artifactId>spring-boot-devtools</artifactId>
+        <scope>runtime</scope>
+        <optional>true</optional>
+    </dependency>
+    <dependency>
+        <groupId>org.projectlombok</groupId>
+        <artifactId>lombok</artifactId>
+        <optional>true</optional>
+    </dependency>
+    <dependency>
+        <groupId>org.springframework.boot</groupId>
+        <artifactId>spring-boot-starter-test</artifactId>
+        <scope>test</scope>
+    </dependency>
+</dependencies>
+```
+#### 14.2.2.YML文件
+
+8802和8801YML文件主要的不同是管道的名称一个是output一个是input
+
+```yaml
+server:
+  port: 8802
+
+spring:
+  application:
+    name: cloud-stream-consumer
+  cloud:
+    stream:
+      binders: # 在此处配置要绑定的rabbitmq的服务信息；
+        defaultRabbit: # 表示定义的名称，用于于binding整合
+          type: rabbit # 消息组件类型
+          environment: # 设置rabbitmq的相关的环境配置
+            spring:
+              rabbitmq:
+                host: localhost
+                port: 5672
+                username: guest
+                password: guest
+      bindings: # 服务的整合处理
+        input: # 这个名字是一个通道的名称
+          destination: studyExchange # 表示要使用的Exchange名称定义
+          content-type: application/json # 设置消息类型，本次为对象json，如果是文本则设置“text/plain”
+          binder: defaultRabbit # 设置要绑定的消息服务的具体设置
+
+eureka:
+  client: # 客户端进行Eureka注册的配置
+    service-url:
+      defaultZone: http://eureka7001.com:7001/eureka
+  instance:
+    lease-renewal-interval-in-seconds: 2 # 设置心跳的时间间隔（默认是30秒）
+    lease-expiration-duration-in-seconds: 5 # 如果现在超过了5秒的间隔（默认是90秒）
+    instance-id: receive-8802.com  # 在信息列表时显示主机名称
+    prefer-ip-address: true     # 访问的路径变为IP地址
+```
+
+#### 14.2.3.主启动类
+
+- com.zzx.springcloud.StreamMQMain8802
+
+```java
+@SpringBootApplication
+public class StreamMQMain8802 {
+    public static void main(String[] args) {
+        SpringApplication.run(StreamMQMain8802.class, args);
+    }
+}
+```
+
+#### 14.2.4.Controller层
+
+- com.zzx.springcloud.controller.ReceiveMessageListenerController
+
+```java
+@Component
+@EnableBinding(Sink.class)
+public class ReceiveMessageListenerController {
+
+    @Value("${server.port}")
+    private String serverPort;
+
+    @StreamListener(Sink.INPUT)
+    public void input(Message<String> message) {
+        System.out.println("消费者1号,------>接收到的消息:  " + message.getPayload() + "\t  port:  " + serverPort);
+    }
+}
+```
+
+#### 14.2.5.测试
+
+- 多次访问http://localhost:8801/sendMessage
+- 可以看到在8801控制台成功发送一串数据
+
+![image-20200426122052374](https://tva1.sinaimg.cn/large/007S8ZIlgy1ge71vadktwj317o0900vi.jpg)
+
+- 在8802控制台可以看到8801发送的数据全部被接收到，而且一一吻合
+
+![image-20200426122145046](https://tva1.sinaimg.cn/large/007S8ZIlgy1ge71w6yzu5j31fw08qjvf.jpg)
+
+- 在RabbitMQ的studyExchange中也成功侦测到了一个绑定
+
+![image-20200426122253781](https://tva1.sinaimg.cn/large/007S8ZIlgy1ge71xdl2pnj30u00v3juw.jpg)
+
+
+
+### 14.3.消息重复消费
+
+#### 14.3.1.构建8803子模块
+
+> 只需完全拷贝8802搭建cloud-stream-rabbitmq-consumer8803，改动必要的端口及类名即可
+
+#### 14.3.2.启动必要的微服务
+
+> 启动7001，8801，8802和8803
+
+#### 14.3.3.测试
+
+- 多次访问http://localhost:8801/sendMessage测试
+
+- 8801发出的消息
+
+![image-20200426124051083](https://tva1.sinaimg.cn/large/007S8ZIlgy1ge72g250vxj315m09sq5p.jpg)
+
+- 可以看到8002和8003对消息进行了重复的消费
+
+![image-20200426124128653](https://tva1.sinaimg.cn/large/007S8ZIlgy1ge72gpgxkfj31h009mn0y.jpg)
+
+![image-20200426124149464](https://tva1.sinaimg.cn/large/007S8ZIlgy1ge72h2fh98j31gg09mjv6.jpg)
+
+#### 14.3.4.消息重复消费解决
+
+- 查看RabbitMQ可以看到，8801和8802默认是不同分组的
+
+![image-20200426124942697](https://tva1.sinaimg.cn/large/007S8ZIlgy1ge72pa3u2uj30u00ya789.jpg)
+
+- 自定义分组演示，分别修改8802和8803的YML文件，spring.stream.bindings.input下新增group: zzxAAA和zzxBBB
+
+```yaml
+spring:
+    stream:
+      bindings: 
+        input: 
+          group: zzxAAA #8802配置zzxAAA，8803配置zzxBBB
+```
+
+- 查看RabbitMQ发现组名已经成功改变
+
+![image-20200426125602797](https://tva1.sinaimg.cn/large/007S8ZIlgy1ge72vvki50j30u00zk0wd.jpg)
+
+- 上述操作其实只是演示如何自定义分组，所以此时我们再测试访问还是会出现消息的重复消费，要想解决消息重复消费，只需将两个组变为相同组，将8802和8803yml中的group都改为zzxZZZ
+
+- 此时再次重新测试多次访问http://localhost:8801/sendMessage
+
+  - 8801发出了5条消息
+
+  ![image-20200426130245958](https://tva1.sinaimg.cn/large/007S8ZIlgy1ge732uvctwj314a09atba.jpg)
+  - 8802消费了2条
+
+  ![image-20200426130350357](https://tva1.sinaimg.cn/large/007S8ZIlgy1ge733z74pdj31em086jtj.jpg)
+  - 8803消费了3条
+
+  ![image-20200426130419377](https://tva1.sinaimg.cn/large/007S8ZIlgy1ge734i2poaj31e607y412.jpg)
+
+- 至此，消息的重复消费问题解决成功
